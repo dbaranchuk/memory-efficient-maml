@@ -41,12 +41,11 @@ class GradientCheckpointMAML:
         model = self.model
         opt_kwargs = opt_kwargs or {}
         max_steps = min(len(inputs), self.max_steps)
-        optimizer_state = self.optimizer.get_initial_state(self, **opt_kwargs)
+        optimizer_state = self.meta_optimizer.get_initial_state(self, **opt_kwargs)
 
         # Reset stats for nn.BatchNorm2d
         reset_batchnorm(model)
         print("MODEL UNIQUE ID", id(model))
-        #     assert not model.training, "randomness and batchnorm-like layers not yet supported"
 
         parameters_to_copy = list(self.get_trainable_parameters(model))
         parameters_not_to_copy = [param for param in chain(model.parameters(), model.buffers())
@@ -66,10 +65,10 @@ class GradientCheckpointMAML:
                       "inside_checkpoint_forward:", inside_checkpoint_forward)
                 with torch.enable_grad():
                     with handle_batchnorm(updated_model):
-                        loss = self.loss_funtion(updated_model, inputs[i])
+                        loss = self.loss_funtion(updated_model, inputs[i], **kwargs)
 
                     with do_not_copy(*parameters_not_to_copy):
-                        _, updated_model = self.optimizer.step(optimizer_state,
+                        _, updated_model = self.meta_optimizer.step(optimizer_state,
                             updated_model, loss=loss, detach=inside_checkpoint_forward,
                             parameters=self.get_parameters(updated_model))
                 i = i + 1
