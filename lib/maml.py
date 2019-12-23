@@ -34,12 +34,13 @@ class GradientCheckpointMAML:
     def __call__(self, inputs, checkpoint_steps=None, opt_kwargs=None, loss_kwargs=None, **kwargs):
         """
         Perform meta optimizer to the model (out-of-place) and return an updated copy
+        :param inputs: data that is fed into the model
         :param opt_kwargs: optional overrides for optimizer.get_initial_state
         :param kwargs: extra parameters passed to optimizer.step
         :returns: updated_model, final_loss
         :rtype: MAML.Result
         """
-        model = deepcopy(self.model)
+        model = self.model
         opt_kwargs, loss_kwargs = opt_kwargs or {}, loss_kwargs or {}
         max_steps = min(len(inputs), self.max_steps)
         optimizer_state = self.meta_optimizer.get_initial_state(self, **opt_kwargs)
@@ -65,9 +66,9 @@ class GradientCheckpointMAML:
                 print("MAML INTERNAL STEP:", int(i),
                       "inside_checkpoint_forward:", inside_checkpoint_forward)
                 with torch.enable_grad():
-                    #with handle_batchnorm(updated_model):
-                    index = int(i.item())
-                    loss = self.loss_function(updated_model, inputs[index], **loss_kwargs)
+                    with handle_batchnorm(updated_model):
+                        index = int(i.item())
+                        loss = self.loss_function(updated_model, inputs[index], **loss_kwargs)
 
                     with do_not_copy(*parameters_not_to_copy):
                         _, updated_model = self.meta_optimizer.step(optimizer_state,
@@ -112,6 +113,7 @@ class MAML:
     def __call__(self, inputs, opt_kwargs=None, loss_kwargs=None, **kwargs):
         """
         Perform meta optimizer to the model (out-of-place) and return an updated copy
+        :param inputs: data that is fed into the model
         :param opt_kwargs: optional overrides for optimizer.get_initial_state
         :param kwargs: extra parameters passed to optimizer.step
         :returns: updated_model, final_loss
@@ -119,11 +121,19 @@ class MAML:
         """
         opt_kwargs, loss_kwargs = opt_kwargs or {}, loss_kwargs or {}
         optimizer_state = self.meta_optimizer.get_initial_state(self, **opt_kwargs)
-        model = deepcopy(self.model)
+
+        parameters_to_copy = list(self.get_parameters(self.model))
+        parameters_not_to_copy = [param for param in chain(self.model.parameters(), self.model.buffers())
+                                  if param not in set(parameters_to_copy)]
+
+        updated_model = copy_and_replace(  # TODO
+            self.model, dict(zip(parameters_to_copy, parameters_to_copy)), parameters_not_to_copy)
+
         # Reset stats for nn.BatchNorm2d
-        reset_batchnorm(model)
+        reset_batchnorm(updated_model)
+
         for input in inputs:
-            loss = self.loss_function(model, input, **loss_kwargs)
-            optimizer_state, model = self.meta_optimizer.step(optimizer_state, model, loss,
-                                                              parameters=self.get_parameters(model), **kwargs)
-        return self.Result(model, loss=loss)
+            loss = self.loss_function(updated_model, input, **loss_kwargs)
+            optimizer_state, updated_model = self.meta_optimizer.step(optimizer_state, updated_model, loss,
+                                                              parameters=self.get_parameters(updated_model), **kwargs)
+        return self.Result(updated_model, loss=loss)
