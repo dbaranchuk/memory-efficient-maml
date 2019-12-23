@@ -62,7 +62,7 @@ class MAML(nn.Module):
                 optimizer_state, model, loss, parameters=get_parameters(model), **kwargs)
         return self.Result(model, loss=loss)
 
-    def checkpoint_meta_forward(self, inputs, targets, total_steps, checkpoint_steps=None,
+    def checkpoint_meta_forward(self, inputs, targets, max_steps, checkpoint_steps=None,
                                 get_parameters=nn.Module.parameters, opt_kwargs=None, **kwargs):
         model = self
         opt_kwargs = opt_kwargs or {}
@@ -104,10 +104,10 @@ class MAML(nn.Module):
         i = torch.zeros(1, requires_grad=True)
         trainable_parameters = model.get_trainable_parameters(model)
 
-        for steps in get_checkpoint_steps(total_steps, checkpoint_steps):
+        for steps in get_checkpoint_steps(max_steps, checkpoint_steps):
             i, loss, *trainable_parameters = checkpoint(
                 _maml_internal, i, torch.as_tensor(steps), *trainable_parameters)
-        assert i == total_steps
+        assert i == max_steps
         updated_model = copy_and_replace(
             model, dict(zip(get_parameters(model), trainable_parameters)), parameters_not_to_copy)
         return self.Result(updated_model, loss=loss)
