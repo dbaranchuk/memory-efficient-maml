@@ -87,21 +87,42 @@ class GradientCheckpointMAML:
         return self.Result(updated_model, loss=loss)
 
 
-    # def __call__(self, inputs, opt_kwargs=None, **kwargs):
-    #     """
-    #     Perform meta optimizer to the model (out-of-place) and return an updated copy
-    #     :param opt_kwargs: optional overrides for optimizer.get_initial_state
-    #     :param kwargs: extra parameters passed to optimizer.step
-    #     :returns: updated_model, final_loss
-    #     :rtype: MAML.Result
-    #     """
-    #     opt_kwargs = opt_kwargs or {}
-    #     optimizer_state = self.meta_optimizer.get_initial_state(self, **opt_kwargs)
-    #     model = self.model
-    #     # Reset stats for nn.BatchNorm2d
-    #     reset_batchnorm(model)
-    #     for input in inputs:
-    #         loss = self.loss_function(model, input)
-    #         optimizer_state, model = self.meta_optimizer.step(optimizer_state, model, loss,
-    #                                                      parameters=self.get_parameters(model), **kwargs)
-    #     return self.Result(model, loss=loss)
+class MAML:
+    Result = namedtuple('Result', ['model', 'loss'])
+
+    def __init__(self, model: nn.Module, loss_function,
+                 meta_optimizer=IngraphGradientDescent(0.01),
+                 get_parameters=nn.Module.parameters,
+                 max_steps=50):
+        """ MAML module that attempts to change model by performing SGD (with optional momentum and rms scaling)
+            :param model: a torch module that will be updated
+            :param loss_function: objective function(model(inputs), targets) that is minimized by editor.
+                By default this function should be non-negative and loss == 0 is a trigger to finish editing
+            :param meta_optimizer: in-graph optimizer that creates updated copies of model
+            :param max_steps: after this many gradient steps the process is terminated
+        """
+        super().__init__()
+        self.model = model
+        self.loss_function = loss_function
+        self.meta_optimizer = meta_optimizer
+        self.get_parameters = get_parameters
+        self.max_steps = max_steps
+
+    def __call__(self, inputs, opt_kwargs=None, **kwargs):
+        """
+        Perform meta optimizer to the model (out-of-place) and return an updated copy
+        :param opt_kwargs: optional overrides for optimizer.get_initial_state
+        :param kwargs: extra parameters passed to optimizer.step
+        :returns: updated_model, final_loss
+        :rtype: MAML.Result
+        """
+        opt_kwargs = opt_kwargs or {}
+        optimizer_state = self.meta_optimizer.get_initial_state(self, **opt_kwargs)
+        model = self.model
+        # Reset stats for nn.BatchNorm2d
+        reset_batchnorm(model)
+        for input in inputs:
+            loss = self.loss_function(model, input)
+            optimizer_state, model = self.meta_optimizer.step(optimizer_state, model, loss,
+                                                         parameters=self.get_parameters(model), **kwargs)
+        return self.Result(model, loss=loss)
