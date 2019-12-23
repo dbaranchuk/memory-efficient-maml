@@ -30,7 +30,7 @@ class GradientCheckpointMAML:
         self.get_parameters = get_parameters
         self.max_steps = max_steps
 
-    def __call__(self, inputs, checkpoint_steps=None, opt_kwargs=None, **kwargs):
+    def __call__(self, inputs, checkpoint_steps=None, opt_kwargs=None, loss_kwargs=None, **kwargs):
         """
         Perform meta optimizer to the model (out-of-place) and return an updated copy
         :param opt_kwargs: optional overrides for optimizer.get_initial_state
@@ -39,7 +39,7 @@ class GradientCheckpointMAML:
         :rtype: MAML.Result
         """
         model = self.model
-        opt_kwargs = opt_kwargs or {}
+        opt_kwargs, loss_kwargs = opt_kwargs or {}, loss_kwargs or {}
         max_steps = min(len(inputs), self.max_steps)
         optimizer_state = self.meta_optimizer.get_initial_state(self, **opt_kwargs)
 
@@ -66,12 +66,12 @@ class GradientCheckpointMAML:
                 with torch.enable_grad():
                     #with handle_batchnorm(updated_model):
                     index = int(i.item())
-                    loss = self.loss_function(updated_model, inputs[index], **kwargs)
+                    loss = self.loss_function(updated_model, inputs[index], **loss_kwargs)
 
                     with do_not_copy(*parameters_not_to_copy):
                         _, updated_model = self.meta_optimizer.step(optimizer_state,
                             updated_model, loss=loss, detach=inside_checkpoint_forward,
-                            parameters=self.get_parameters(updated_model))
+                            parameters=self.get_parameters(updated_model), **kwargs)
                 i = i + 1
             return (i, loss, *self.get_parameters(updated_model))
 
@@ -108,7 +108,7 @@ class MAML:
         self.get_parameters = get_parameters
         self.max_steps = max_steps
 
-    def __call__(self, inputs, opt_kwargs=None, **kwargs):
+    def __call__(self, inputs, opt_kwargs=None, loss_kwargs=None, **kwargs):
         """
         Perform meta optimizer to the model (out-of-place) and return an updated copy
         :param opt_kwargs: optional overrides for optimizer.get_initial_state
@@ -116,13 +116,13 @@ class MAML:
         :returns: updated_model, final_loss
         :rtype: MAML.Result
         """
-        opt_kwargs = opt_kwargs or {}
+        opt_kwargs, loss_kwargs = opt_kwargs or {}, loss_kwargs or {}
         optimizer_state = self.meta_optimizer.get_initial_state(self, **opt_kwargs)
         model = self.model
         # Reset stats for nn.BatchNorm2d
         reset_batchnorm(model)
         for input in inputs:
-            loss = self.loss_function(model, input)
+            loss = self.loss_function(model, input, **loss_kwargs)
             optimizer_state, model = self.meta_optimizer.step(optimizer_state, model, loss,
                                                          parameters=self.get_parameters(model), **kwargs)
         return self.Result(model, loss=loss)
