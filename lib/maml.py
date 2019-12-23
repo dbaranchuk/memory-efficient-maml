@@ -106,9 +106,9 @@ class MAML:
         super().__init__()
         self.model = model
         self.loss_function = loss_function
-        self.meta_optimizer = meta_optimizer
+        self.meta_optimizer = meta_optimizer # todo rename
         self.get_parameters = get_parameters
-        self.max_steps = max_steps
+        self.max_steps = max_steps # todo rm
 
     def __call__(self, inputs, opt_kwargs=None, loss_kwargs=None, **kwargs):
         """
@@ -126,14 +126,16 @@ class MAML:
         parameters_not_to_copy = [param for param in chain(self.model.parameters(), self.model.buffers())
                                   if param not in set(parameters_to_copy)]
 
-        updated_model = copy_and_replace(  # TODO
-            self.model, dict(zip(parameters_to_copy, parameters_to_copy)), parameters_not_to_copy)
+        updated_model = self.model#copy_and_replace(  # TODO
+            #self.model, dict(zip(parameters_to_copy, parameters_to_copy)), parameters_not_to_copy)
 
         # Reset stats for nn.BatchNorm2d
-        reset_batchnorm(updated_model)
+        assert not self.model.training
+        #reset_batchnorm(updated_model) #TODO this loses accumulated statistics #TODO all 3 batchnorm types
 
         for input in inputs:
             loss = self.loss_function(updated_model, input, **loss_kwargs)
             optimizer_state, updated_model = self.meta_optimizer.step(optimizer_state, updated_model, loss,
                                                               parameters=self.get_parameters(updated_model), **kwargs)
+
         return self.Result(updated_model, loss=loss)
