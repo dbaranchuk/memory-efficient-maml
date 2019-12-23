@@ -34,7 +34,8 @@ class MAML(nn.Module):
     def forward(self, x):
         return self.model(x)
 
-    def meta_forward(self, inputs, targets, max_steps=None, opt_kwargs=None, **kwargs):
+    def meta_forward(self, inputs, targets, max_steps=None,
+                     get_parameters=nn.Module.parameters, opt_kwargs=None, **kwargs):
         """
         Perform meta optimizer to the model (out-of-place) and return an updated copy
         :param inputs: data that is fed into the model
@@ -58,7 +59,7 @@ class MAML(nn.Module):
             loss = self.loss_function(prediction, targets)
 
             optimizer_state, model = self.optimizer.step(
-                optimizer_state, model, loss, parameters=model.get_trainable_parameters(model), **kwargs)
+                optimizer_state, model, loss, parameters=get_parameters(model), **kwargs)
         return self.Result(model, loss=loss)
 
     def checkpoint_meta_forward(self, inputs, targets, total_steps, checkpoint_steps=None,
@@ -97,7 +98,7 @@ class MAML(nn.Module):
                     with do_not_copy(*parameters_not_to_copy):
                         optimizer_state, updated_model = self.optimizer.step(optimizer_state,
                             updated_model, loss=loss, detach=inside_checkpoint_forward,
-                            parameters=updated_model.get_trainable_parameters(updated_model))
+                            parameters=get_parameters(updated_model))
             return (i, loss, *get_parameters(updated_model))
 
         i = torch.zeros(1, requires_grad=True)
