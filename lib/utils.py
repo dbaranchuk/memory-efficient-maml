@@ -15,13 +15,6 @@ def free_memory(sleep_time=0.1):
     time.sleep(sleep_time)
 
 
-def to_float_str(element):
-    try:
-        return str(float(element))
-    except ValueError:
-        return element
-
-
 def straight_through_grad(function, **kwargs):
     """
     modify function so that it is applied normally but excluded from backward pass
@@ -53,36 +46,10 @@ def check_numpy(x):
     return x
 
 
-class OptimizerList(torch.optim.Optimizer):
-    def __init__(self, *optimizers):
-        self.optimizers = optimizers
-
-    def step(self):
-        return [opt.step() for opt in self.optimizers]
-
-    def zero_grad(self):
-        return [opt.zero_grad() for opt in self.optimizers]
-
-    def add_param_group(self, *args, **kwargs):
-        raise ValueError("Please call add_param_group in one of self.optimizers")
-
-    def __getstate__(self):
-        return [opt.__getstate__() for opt in self.optimizers]
-
-    def __setstate__(self, state):
-        return [opt.__setstate__(opt_state) for opt, opt_state in zip(self.optimizers, state)]
-
-    def __repr__(self):
-        return repr(self.optimizers)
-
-    def state_dict(self, **kwargs):
-        return {"opt_{}".format(i): opt.state_dict(**kwargs) for i, opt in enumerate(self.optimizers)}
-
-    def load_state_dict(self, state_dict, **kwargs):
-        return [
-            opt.load_state_dict(state_dict["opt_{}".format(i)])
-            for i, opt in enumerate(self.optimizers)
-        ]
+def reset_batchnorm(model):
+    for module in model.modules():
+        if isinstance(module, nn.BatchNorm2d):
+            module.reset_running_stats()
 
 
 def get_checkpoint_steps(total_steps, checkpoint_steps=None):

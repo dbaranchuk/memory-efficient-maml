@@ -2,79 +2,53 @@ from collections import namedtuple
 from itertools import chain
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+
 from lib.ingraph_update import IngraphGradientDescent
 from lib.copy_and_replace import copy_and_replace, do_not_copy
-from lib.utils import get_checkpoint_steps, handle_batchnorm
+from lib.utils import get_checkpoint_steps, handle_batchnorm, reset_batchnorm
 from torch.utils.checkpoint import checkpoint
 
 
-class MAML(nn.Module):
+class GradientCheckpointMAML:
     Result = namedtuple('Result', ['model', 'loss'])
 
-    def __init__(self, model, loss_function=F.cross_entropy,
-                 optimizer=IngraphGradientDescent(0.01), max_steps=50):
+    def __init__(self, model:nn.Module, loss_function=F.cross_entropy,
+                 meta_optimizer=IngraphGradientDescent(0.01),
+                 get_parameters=nn.Module.parameters,
+                 max_steps=50):
         """ MAML module that attempts to change model by performing SGD (with optional momentum and rms scaling)
-            :param model: a torch module that will be edited
+            :param model: a torch module that will be updated
             :param loss_function: objective function(model(inputs), targets) that is minimized by editor.
                 By default this function should be non-negative and loss == 0 is a trigger to finish editing
-            :param optimizer: in-graph optimizer that creates updated copies of model
+            :param meta_optimizer: in-graph optimizer that creates updated copies of model
+            :param max_steps: after this many gradient steps the process is terminated
         """
         super().__init__()
-        self.module, self.loss_function, self.optimizer = model, loss_function, optimizer
-        self.max_steps = max_steps
         self.model = model
+        self.loss_function = loss_function
+        self.meta_optimizer = meta_optimizer
+        self.get_parameters = get_parameters
+        self.max_steps = max_steps
 
-    @staticmethod
-    def reset_batchnorm(model):
-        for module in model.modules():
-            if isinstance(module, nn.BatchNorm2d):
-                module.reset_running_stats()
-
-    def forward(self, x):
-        return self.model(x)
-
-    def meta_forward(self, inputs, targets, max_steps=None,
-                     get_parameters=nn.Module.parameters, opt_kwargs=None, **kwargs):
+    def __call__(self, inputs, checkpoint_steps=None, opt_kwargs=None, **kwargs):
         """
         Perform meta optimizer to the model (out-of-place) and return an updated copy
-        :param inputs: data that is fed into the model
-        :param targets: reference answers that are fed into loss function
-        :param max_steps: after this many gradient steps the process is terminated
         :param opt_kwargs: optional overrides for optimizer.get_initial_state
         :param kwargs: extra parameters passed to optimizer.step
-        :returns: updaed_model, final_loss
+        :returns: updated_model, final_loss
         :rtype: MAML.Result
         """
-        model = self
-        max_steps = max_steps or self.max_steps
+        model = self.model
         opt_kwargs = opt_kwargs or {}
+        max_steps = min(len(inputs), self.max_steps)
         optimizer_state = self.optimizer.get_initial_state(self, **opt_kwargs)
 
         # Reset stats for nn.BatchNorm2d
-        model.reset_batchnorm(model)
-
-        for _ in range(max_steps):
-            prediction = model(inputs)
-            loss = self.loss_function(prediction, targets)
-
-            optimizer_state, model = self.optimizer.step(
-                optimizer_state, model, loss, parameters=get_parameters(model), **kwargs)
-        return self.Result(model, loss=loss)
-
-    def checkpoint_meta_forward(self, inputs, targets, max_steps, checkpoint_steps=None,
-                                get_parameters=nn.Module.parameters, opt_kwargs=None, **kwargs):
-        model = self
-        opt_kwargs = opt_kwargs or {}
-        optimizer_state = self.optimizer.get_initial_state(self, **opt_kwargs)
-
-        # Reset stats for nn.BatchNorm2d
-        model.reset_batchnorm(model)
-
+        reset_batchnorm(model)
         print("MODEL UNIQUE ID", id(model))
         #     assert not model.training, "randomness and batchnorm-like layers not yet supported"
 
-        parameters_to_copy = list(model.get_trainable_parameters(model))
+        parameters_to_copy = list(self.get_trainable_parameters(model))
         parameters_not_to_copy = [param for param in chain(model.parameters(), model.buffers())
                                   if param not in set(parameters_to_copy)]
 
@@ -88,18 +62,18 @@ class MAML(nn.Module):
             inside_checkpoint_forward = not torch.is_grad_enabled()
 
             for _ in range(steps.item()):
-                i = i + 1
                 print("MAML INTERNAL STEP:", int(i),
                       "inside_checkpoint_forward:", inside_checkpoint_forward)
                 with torch.enable_grad():
                     with handle_batchnorm(updated_model):
-                        preds = updated_model(inputs)
-                    loss = F.cross_entropy(preds, targets)
+                        loss = self.loss_funtion(updated_model, inputs[i])
+
                     with do_not_copy(*parameters_not_to_copy):
-                        optimizer_state, updated_model = self.optimizer.step(optimizer_state,
+                        _, updated_model = self.optimizer.step(optimizer_state,
                             updated_model, loss=loss, detach=inside_checkpoint_forward,
-                            parameters=get_parameters(updated_model))
-            return (i, loss, *get_parameters(updated_model))
+                            parameters=self.get_parameters(updated_model))
+                i = i + 1
+            return (i, loss, *self.get_parameters(updated_model))
 
         i = torch.zeros(1, requires_grad=True)
         trainable_parameters = model.get_trainable_parameters(model)
@@ -107,7 +81,27 @@ class MAML(nn.Module):
         for steps in get_checkpoint_steps(max_steps, checkpoint_steps):
             i, loss, *trainable_parameters = checkpoint(
                 _maml_internal, i, torch.as_tensor(steps), *trainable_parameters)
-        assert i == max_steps
+
         updated_model = copy_and_replace(
-            model, dict(zip(get_parameters(model), trainable_parameters)), parameters_not_to_copy)
+            model, dict(zip(self.get_parameters(model), trainable_parameters)), parameters_not_to_copy)
         return self.Result(updated_model, loss=loss)
+
+
+    # def __call__(self, inputs, opt_kwargs=None, **kwargs):
+    #     """
+    #     Perform meta optimizer to the model (out-of-place) and return an updated copy
+    #     :param opt_kwargs: optional overrides for optimizer.get_initial_state
+    #     :param kwargs: extra parameters passed to optimizer.step
+    #     :returns: updated_model, final_loss
+    #     :rtype: MAML.Result
+    #     """
+    #     opt_kwargs = opt_kwargs or {}
+    #     optimizer_state = self.meta_optimizer.get_initial_state(self, **opt_kwargs)
+    #     model = self.model
+    #     # Reset stats for nn.BatchNorm2d
+    #     reset_batchnorm(model)
+    #     for input in inputs:
+    #         loss = self.loss_function(model, input)
+    #         optimizer_state, model = self.meta_optimizer.step(optimizer_state, model, loss,
+    #                                                      parameters=self.get_parameters(model), **kwargs)
+    #     return self.Result(model, loss=loss)
