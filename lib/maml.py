@@ -47,7 +47,7 @@ class GradientCheckpointMAML:
         reset_batchnorm(model)
         print("MODEL UNIQUE ID", id(model))
 
-        parameters_to_copy = list(self.get_trainable_parameters(model))
+        parameters_to_copy = list(self.get_parameters(model))
         parameters_not_to_copy = [param for param in chain(model.parameters(), model.buffers())
                                   if param not in set(parameters_to_copy)]
 
@@ -75,7 +75,7 @@ class GradientCheckpointMAML:
             return (i, loss, *self.get_parameters(updated_model))
 
         i = torch.zeros(1, requires_grad=True)
-        trainable_parameters = model.get_trainable_parameters(model)
+        trainable_parameters = self.get_parameters(model)
 
         for steps in get_checkpoint_steps(max_steps, checkpoint_steps):
             i, loss, *trainable_parameters = checkpoint(
