@@ -64,9 +64,9 @@ class GradientCheckpointMAML:
                 print("MAML INTERNAL STEP:", int(i),
                       "inside_checkpoint_forward:", inside_checkpoint_forward)
                 with torch.enable_grad():
-                    with handle_batchnorm(updated_model):
-                        index = int(i.item())
-                        loss = self.loss_function(updated_model, inputs[index], **kwargs)
+                    #with handle_batchnorm(updated_model):
+                    index = int(i.item())
+                    loss = self.loss_function(updated_model, inputs[index], **kwargs)
 
                     with do_not_copy(*parameters_not_to_copy):
                         _, updated_model = self.meta_optimizer.step(optimizer_state,
