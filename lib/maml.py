@@ -45,9 +45,10 @@ class MAML(nn.Module):
         :returns: updaed_model, final_loss
         :rtype: MAML.Result
         """
-        optimizer_state = self.optimizer.get_initial_state(self, **opt_kwargs)
         model = self
         max_steps = max_steps or self.max_steps
+        opt_kwargs = opt_kwargs or {}
+        optimizer_state = self.optimizer.get_initial_state(self, **opt_kwargs)
 
         # Reset stats for nn.BatchNorm2d
         model.reset_batchnorm(model)
