@@ -34,8 +34,7 @@ class MAML(nn.Module):
     def forward(self, x):
         return self.model(x)
 
-    def meta_forward(self, inputs, targets, max_steps=None,
-                     model_kwargs=None, loss_kwargs=None, opt_kwargs=None, **kwargs):
+    def meta_forward(self, inputs, targets, max_steps=None, opt_kwargs=None, **kwargs):
         """
         Perform meta optimizer to the model (out-of-place) and return an updated copy
         :param inputs: data that is fed into the model
@@ -54,8 +53,8 @@ class MAML(nn.Module):
         model.reset_batchnorm(model)
 
         for _ in range(max_steps):
-            prediction = model(inputs, **model_kwargs)
-            loss = self.loss_function(prediction, targets, **loss_kwargs)
+            prediction = model(inputs)
+            loss = self.loss_function(prediction, targets)
 
             optimizer_state, model = self.optimizer.step(
                 optimizer_state, model, loss, parameters=model.get_trainable_parameters(model), **kwargs)
@@ -103,7 +102,6 @@ class MAML(nn.Module):
         trainable_parameters = model.get_trainable_parameters(model)
 
         for steps in get_checkpoint_steps(total_steps, checkpoint_steps):
-            print(i)
             i, loss, *trainable_parameters = checkpoint(
                 _maml_internal, i, torch.as_tensor(steps), *trainable_parameters)
         assert i == total_steps
