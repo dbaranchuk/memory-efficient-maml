@@ -1,0 +1,9 @@
+torch>=1.1.0
+numpy>=0.13
+scipy>=1.2.0
+scikit-learn>=0.17
+torchvision
+matplotlib
+tqdm
+pandas
+prefetch_generator
