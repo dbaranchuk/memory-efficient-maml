@@ -63,6 +63,7 @@ class MAML(nn.Module):
     def checkpoint_meta_forward(self, inputs, targets, total_steps, checkpoint_steps=None,
                                 get_parameters=nn.Module.parameters, opt_kwargs=None, **kwargs):
         model = self
+        opt_kwargs = opt_kwargs or {}
         optimizer_state = self.optimizer.get_initial_state(self, **opt_kwargs)
 
         # Reset stats for nn.BatchNorm2d
