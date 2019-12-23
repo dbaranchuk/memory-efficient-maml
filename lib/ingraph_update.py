@@ -9,7 +9,7 @@ import torch
 from itertools import chain
 
 from torch import nn as nn
-from lib.basic import straight_through_grad
+from lib.utils import straight_through_grad
 from lib.copy_and_replace import copy_and_replace
 
 
