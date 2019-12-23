@@ -12,7 +12,7 @@ from torch.utils.checkpoint import checkpoint
 class GradientCheckpointMAML:
     Result = namedtuple('Result', ['model', 'loss'])
 
-    def __init__(self, model:nn.Module, loss_function=F.cross_entropy,
+    def __init__(self, model:nn.Module, loss_function,
                  meta_optimizer=IngraphGradientDescent(0.01),
                  get_parameters=nn.Module.parameters,
                  max_steps=50):
