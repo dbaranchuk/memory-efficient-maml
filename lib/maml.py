@@ -2,6 +2,7 @@ from collections import namedtuple
 from itertools import chain
 import torch
 import torch.nn as nn
+from copy import deepcopy
 
 from lib.ingraph_update import IngraphGradientDescent
 from lib.copy_and_replace import copy_and_replace, do_not_copy
@@ -38,7 +39,7 @@ class GradientCheckpointMAML:
         :returns: updated_model, final_loss
         :rtype: MAML.Result
         """
-        model = self.model
+        model = deepcopy(self.model)
         opt_kwargs, loss_kwargs = opt_kwargs or {}, loss_kwargs or {}
         max_steps = min(len(inputs), self.max_steps)
         optimizer_state = self.meta_optimizer.get_initial_state(self, **opt_kwargs)
@@ -118,11 +119,11 @@ class MAML:
         """
         opt_kwargs, loss_kwargs = opt_kwargs or {}, loss_kwargs or {}
         optimizer_state = self.meta_optimizer.get_initial_state(self, **opt_kwargs)
-        model = self.model
+        model = deepcopy(self.model)
         # Reset stats for nn.BatchNorm2d
         reset_batchnorm(model)
         for input in inputs:
             loss = self.loss_function(model, input, **loss_kwargs)
             optimizer_state, model = self.meta_optimizer.step(optimizer_state, model, loss,
-                                                         parameters=self.get_parameters(model), **kwargs)
+                                                              parameters=self.get_parameters(model), **kwargs)
         return self.Result(model, loss=loss)

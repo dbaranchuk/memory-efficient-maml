@@ -75,7 +75,7 @@ class IngraphGradientDescent(nn.Module):
             updated_self: updated(out-of-place) version of self
         """
         updated_model = get_updated_model(module, loss=loss, learning_rate=self.learning_rate,
-                                            parameters=list(parameters or module.parameters()), **kwargs)
+                                          parameters=list(parameters or module.parameters()), **kwargs)
         return state, updated_model
 
     def forward(self, *args, **kwargs):
