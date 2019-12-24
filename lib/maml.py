@@ -11,9 +11,10 @@ from torch.utils.checkpoint import checkpoint
 
 
 class GradientCheckpointMAML:
-    Result = namedtuple('Result', ['model', 'loss'])
+    Result = namedtuple('Result', ['model', 'loss', 'optimizer_state'])
 
     def __init__(self, model:nn.Module, loss_function,
+                 checkpoint_steps=1,
                  optimizer=IngraphGradientDescent(0.01),
                  get_parameters=nn.Module.parameters):
         """ MAML module that attempts to change model by performing SGD (with optional momentum and rms scaling)
@@ -27,8 +28,9 @@ class GradientCheckpointMAML:
         self.loss_function = loss_function
         self.optimizer = optimizer
         self.get_parameters = get_parameters
+        self.checkpoint_steps = 1
 
-    def __call__(self, inputs, checkpoint_steps=None, opt_kwargs=None, loss_kwargs=None, **kwargs):
+    def __call__(self, inputs, opt_kwargs=None, loss_kwargs=None, **kwargs):
         """
         Perform meta optimizer to the model (out-of-place) and return an updated copy
         :param inputs: data that is fed into the model
@@ -80,8 +82,8 @@ class GradientCheckpointMAML:
         trainable_parameters = self.get_parameters(model)
         trainable_parameters_and_optimizer_state = list(chain(trainable_parameters, optimizer_state))
 
-        for chunk_start in range(0, len(inputs), checkpoint_steps):
-            steps = min(checkpoint_steps, len(inputs) - chunk_start)
+        for chunk_start in range(0, len(inputs), self.checkpoint_steps):
+            steps = min(self.checkpoint_steps, len(inputs) - chunk_start)
             i, loss, *trainable_parameters_and_optimizer_state = checkpoint(
                 _maml_internal, i, torch.as_tensor(steps), *trainable_parameters_and_optimizer_state)
 
@@ -95,7 +97,7 @@ class GradientCheckpointMAML:
 
 
 class MAML:
-    Result = namedtuple('Result', ['model', 'loss'])
+    Result = namedtuple('Result', ['model', 'loss', 'optimizer_state'])
 
     def __init__(self, model: nn.Module, loss_function,
                  optimizer=IngraphGradientDescent(0.01),
@@ -134,4 +136,4 @@ class MAML:
             optimizer_state, updated_model = self.optimizer.step(optimizer_state, updated_model, loss,
                                                               parameters=self.get_parameters(updated_model), **kwargs)
 
-        return self.Result(updated_model, loss=loss)
+        return self.Result(updated_model, loss=loss, optimizer_state=optimizer_state)
