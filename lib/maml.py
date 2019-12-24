@@ -39,11 +39,10 @@ class GradientCheckpointMAML:
         """
         model = self.model
         opt_kwargs, loss_kwargs = opt_kwargs or {}, loss_kwargs or {}
-        max_steps = min(len(inputs), self.max_steps)
         optimizer_state = self.optimizer.get_initial_state(self, **opt_kwargs)
 
-        # Reset stats for nn.BatchNorm2d
-        reset_batchnorm(model)
+        # Reset stats for nn.BatchNorm2d TODO
+        # reset_batchnorm(model)
         print("MODEL UNIQUE ID", id(model))
 
         parameters_to_copy = list(self.get_parameters(model))
