@@ -80,8 +80,8 @@ class GradientCheckpointMAML:
         trainable_parameters = self.get_parameters(model)
         trainable_parameters_and_optimizer_state = list(chain(trainable_parameters, optimizer_state))
 
-        for chunk_start in range(0, max_steps, checkpoint_steps):
-            steps = min(checkpoint_steps, max_steps - chunk_start)
+        for chunk_start in range(0, len(inputs), checkpoint_steps):
+            steps = min(checkpoint_steps, len(inputs) - chunk_start)
             i, loss, *trainable_parameters_and_optimizer_state = checkpoint(
                 _maml_internal, i, torch.as_tensor(steps), *trainable_parameters_and_optimizer_state)
 
