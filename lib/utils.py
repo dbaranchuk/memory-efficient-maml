@@ -48,18 +48,8 @@ def check_numpy(x):
 
 def reset_batchnorm(model):
     for module in model.modules():
-        if isinstance(module, nn.BatchNorm2d):
+        if isinstance(module, nn.batchnorm._BatchNorm):
             module.reset_running_stats()
-
-
-def get_checkpoint_steps(total_steps, checkpoint_steps=None):
-    if checkpoint_steps is None:
-        checkpoint_steps = max(1, int(np.ceil(np.sqrt(total_steps))))
-    for _ in range(total_steps // checkpoint_steps):
-        yield checkpoint_steps
-
-    if total_steps % checkpoint_steps > 0:
-        yield total_steps % checkpoint_steps
 
 
 @contextlib.contextmanager

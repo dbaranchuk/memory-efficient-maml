@@ -6,7 +6,7 @@ from copy import deepcopy
 
 from lib.ingraph_update import IngraphGradientDescent
 from lib.copy_and_replace import copy_and_replace, do_not_copy
-from lib.utils import get_checkpoint_steps, handle_batchnorm, reset_batchnorm
+from lib.utils import handle_batchnorm, reset_batchnorm
 from torch.utils.checkpoint import checkpoint
 
 
@@ -14,22 +14,19 @@ class GradientCheckpointMAML:
     Result = namedtuple('Result', ['model', 'loss'])
 
     def __init__(self, model:nn.Module, loss_function,
-                 meta_optimizer=IngraphGradientDescent(0.01),
-                 get_parameters=nn.Module.parameters,
-                 max_steps=50):
+                 optimizer=IngraphGradientDescent(0.01),
+                 get_parameters=nn.Module.parameters):
         """ MAML module that attempts to change model by performing SGD (with optional momentum and rms scaling)
             :param model: a torch module that will be updated
             :param loss_function: objective function(model(inputs), targets) that is minimized by editor.
                 By default this function should be non-negative and loss == 0 is a trigger to finish editing
             :param meta_optimizer: in-graph optimizer that creates updated copies of model
-            :param max_steps: after this many gradient steps the process is terminated
         """
         super().__init__()
         self.model = model
         self.loss_function = loss_function
-        self.meta_optimizer = meta_optimizer
+        self.optimizer = optimizer
         self.get_parameters = get_parameters
-        self.max_steps = max_steps
 
     def __call__(self, inputs, checkpoint_steps=None, opt_kwargs=None, loss_kwargs=None, **kwargs):
         """
@@ -43,7 +40,7 @@ class GradientCheckpointMAML:
         model = self.model
         opt_kwargs, loss_kwargs = opt_kwargs or {}, loss_kwargs or {}
         max_steps = min(len(inputs), self.max_steps)
-        optimizer_state = self.meta_optimizer.get_initial_state(self, **opt_kwargs)
+        optimizer_state = self.optimizer.get_initial_state(self, **opt_kwargs)
 
         # Reset stats for nn.BatchNorm2d
         reset_batchnorm(model)
@@ -55,7 +52,10 @@ class GradientCheckpointMAML:
 
         # WARNING: this code treats model, parameters_to_copy, parameters_not_to_copy]
         # as a global variables for _maml_internal. Please DO NOT change or delete them in this function
-        def _maml_internal(i, steps, *trainable_parameters):
+        def _maml_internal(i, steps, *trainable_parameters_and_state):
+            trainable_parameters = trainable_parameters_and_state[:len(parameters_to_copy)]
+            optimizer_state = trainable_parameters_and_state[len(parameters_to_copy):]
+
             updated_model = copy_and_replace(
                 model, dict(zip(parameters_to_copy, trainable_parameters)), parameters_not_to_copy)
             # version of model with specified initial parameters
@@ -71,44 +71,47 @@ class GradientCheckpointMAML:
                         loss = self.loss_function(updated_model, inputs[index], **loss_kwargs)
 
                     with do_not_copy(*parameters_not_to_copy):
-                        _, updated_model = self.meta_optimizer.step(optimizer_state,
+                        optimizer_state, updated_model = self.optimizer.step(optimizer_state,
                             updated_model, loss=loss, detach=inside_checkpoint_forward,
                             parameters=self.get_parameters(updated_model), **kwargs)
                 i = i + 1
-            return (i, loss, *self.get_parameters(updated_model))
+            return (i, loss, *self.get_parameters(updated_model), *optimizer_state)
 
         i = torch.zeros(1, requires_grad=True)
         trainable_parameters = self.get_parameters(model)
+        trainable_parameters_and_optimizer_state = list(chain(trainable_parameters, optimizer_state))
 
-        for steps in get_checkpoint_steps(max_steps, checkpoint_steps):
-            i, loss, *trainable_parameters = checkpoint(
-                _maml_internal, i, torch.as_tensor(steps), *trainable_parameters)
+        for chunk_start in range(0, max_steps, checkpoint_steps):
+            steps = min(checkpoint_steps, max_steps - chunk_start)
+            i, loss, *trainable_parameters_and_optimizer_state = checkpoint(
+                _maml_internal, i, torch.as_tensor(steps), *trainable_parameters_and_optimizer_state)
+
+        trainable_parameters = trainable_parameters_and_optimizer_state[:len(parameters_to_copy)]
+        optimizer_state = trainable_parameters_and_optimizer_state[len(parameters_to_copy):]
 
         updated_model = copy_and_replace(
-            model, dict(zip(self.get_parameters(model), trainable_parameters)), parameters_not_to_copy)
-        return self.Result(updated_model, loss=loss)
+            model, dict(zip(self.get_parameters(model), trainable_parameters)),
+            parameters_not_to_copy)
+        return self.Result(updated_model, loss=loss, optimizer_state=optimizer_state)
 
 
 class MAML:
     Result = namedtuple('Result', ['model', 'loss'])
 
     def __init__(self, model: nn.Module, loss_function,
-                 meta_optimizer=IngraphGradientDescent(0.01),
-                 get_parameters=nn.Module.parameters,
-                 max_steps=50):
+                 optimizer=IngraphGradientDescent(0.01),
+                 get_parameters=nn.Module.parameters):
         """ MAML module that attempts to change model by performing SGD (with optional momentum and rms scaling)
             :param model: a torch module that will be updated
             :param loss_function: objective function(model(inputs), targets) that is minimized by editor.
                 By default this function should be non-negative and loss == 0 is a trigger to finish editing
-            :param meta_optimizer: in-graph optimizer that creates updated copies of model
-            :param max_steps: after this many gradient steps the process is terminated
+            :param optimizer: in-graph optimizer that creates updated copies of model
         """
         super().__init__()
         self.model = model
         self.loss_function = loss_function
-        self.meta_optimizer = meta_optimizer # todo rename
+        self.optimizer = optimizer
         self.get_parameters = get_parameters
-        self.max_steps = max_steps # todo rm
 
     def __call__(self, inputs, opt_kwargs=None, loss_kwargs=None, **kwargs):
         """
@@ -120,22 +123,16 @@ class MAML:
         :rtype: MAML.Result
         """
         opt_kwargs, loss_kwargs = opt_kwargs or {}, loss_kwargs or {}
-        optimizer_state = self.meta_optimizer.get_initial_state(self, **opt_kwargs)
+        optimizer_state = self.optimizer.get_initial_state(self, **opt_kwargs)
 
-        parameters_to_copy = list(self.get_parameters(self.model))
-        parameters_not_to_copy = [param for param in chain(self.model.parameters(), self.model.buffers())
-                                  if param not in set(parameters_to_copy)]
-
-        updated_model = self.model#copy_and_replace(  # TODO
-            #self.model, dict(zip(parameters_to_copy, parameters_to_copy)), parameters_not_to_copy)
-
+        updated_model = self.model
         # Reset stats for nn.BatchNorm2d
         assert not self.model.training
         #reset_batchnorm(updated_model) #TODO this loses accumulated statistics #TODO all 3 batchnorm types
 
         for input in inputs:
             loss = self.loss_function(updated_model, input, **loss_kwargs)
-            optimizer_state, updated_model = self.meta_optimizer.step(optimizer_state, updated_model, loss,
+            optimizer_state, updated_model = self.optimizer.step(optimizer_state, updated_model, loss,
                                                               parameters=self.get_parameters(updated_model), **kwargs)
 
         return self.Result(updated_model, loss=loss)
