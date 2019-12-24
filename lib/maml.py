@@ -28,7 +28,7 @@ class GradientCheckpointMAML:
         self.loss_function = loss_function
         self.optimizer = optimizer
         self.get_parameters = get_parameters
-        self.checkpoint_steps = 1
+        self.checkpoint_steps = checkpoint_steps
 
     def __call__(self, inputs, opt_kwargs=None, loss_kwargs=None, **kwargs):
         """
