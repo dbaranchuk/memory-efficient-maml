@@ -127,7 +127,7 @@ class MAML:
 
         updated_model = self.model
         # Reset stats for nn.BatchNorm2d
-        assert not self.model.training
+        # assert not self.model.training
         #reset_batchnorm(updated_model) #TODO this loses accumulated statistics #TODO all 3 batchnorm types
 
         for input in inputs:
