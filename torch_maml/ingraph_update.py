@@ -4,13 +4,11 @@ Model-Agnostic Meta-Learning for Fast Adaptation of Deep Networks https://arxiv.
 """
 from collections import namedtuple
 from warnings import warn
-
-import torch
 from itertools import chain
 
+import torch
 from torch import nn as nn
-from lib.utils import straight_through_grad
-from lib.copy_and_replace import copy_and_replace
+from .utils import straight_through_grad, copy_and_replace
 
 
 def get_updated_model(model: nn.Module, loss=None, gradients=None, parameters=None,
@@ -66,7 +64,7 @@ class IngraphGradientDescent(nn.Module):
         """
         Return an updated copy of model after one iteration of gradient descent
         :param state: optimizer state (as in self.get_initial_state)
-        :param module: module to be edited (lib.Editable)
+        :param module: module to be edited (torch_maml.Editable)
         :param loss: torch scalar that is differentiable w.r.t. model parameters
         :parameters: parameters of :module: that will be edited by updates (default = module.parameters())
         :param kwargs: extra parameters passed to get_updated_model
@@ -80,7 +78,6 @@ class IngraphGradientDescent(nn.Module):
 
     def forward(self, *args, **kwargs):
         return self.step(*args, **kwargs)
-
 
 
 class IngraphRMSProp(IngraphGradientDescent):
