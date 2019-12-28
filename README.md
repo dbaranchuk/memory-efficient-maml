@@ -3,7 +3,7 @@
 ### Overview
 
 Straightforward application of the gradient checkpointing 
-technique to Meta-Agnostic-Meta-Learning[1], which mitigates 
+technique[1] to Meta-Agnostic-Meta-Learning[2], which mitigates 
 its high memory consumption and allows to perform a large number
 of optimizer steps in MAML. 
 
