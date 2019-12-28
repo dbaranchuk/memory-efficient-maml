@@ -1,6 +1,5 @@
 """
-Utilities required for backpropagating through gradient descent steps, inspired by:
-Model-Agnostic Meta-Learning for Fast Adaptation of Deep Networks https://arxiv.org/abs/1703.03400
+Utilities required for backpropagating through gradient descent steps
 """
 from collections import namedtuple
 from warnings import warn
@@ -12,7 +11,8 @@ from .utils import straight_through_grad, copy_and_replace
 
 
 def get_updated_model(model: nn.Module, loss=None, gradients=None, parameters=None,
-                      detach=False, learning_rate=1.0, allow_unused=False, **kwargs):
+                      detach=False, learning_rate=1.0, allow_unused=False,
+                      norm_grad=True, max_grad_norm=1e4, **kwargs):
     """
     Creates a copy of model whose parameters are updated with one-step gradient descent w.r.t. loss
     The copy will propagate gradients into the original model
@@ -24,6 +24,8 @@ def get_updated_model(model: nn.Module, loss=None, gradients=None, parameters=No
     :param learning_rate: scales gradients by this value before updating
     :param allow_unused: by default, raise an error if one or more parameters receive None gradients
         Otherwise (allow_unused=True) simply do not update these parameters
+    :param norm_grad: TODO
+    :param max_grad_norm: TODO
     """
     assert (loss is None) != (gradients is None)
     parameters = list(model.parameters() if parameters is None else parameters)
@@ -34,10 +36,17 @@ def get_updated_model(model: nn.Module, loss=None, gradients=None, parameters=No
 
     assert isinstance(gradients, (list, tuple)) and len(gradients) == len(parameters)
 
+    # Hook to normalize weight gradients after each optimizer step
+    def normalize_grad(grad):
+        return (grad * max_grad_norm) / max(grad.norm(), max_grad_norm)
+
     updates = dict()
     for weight, grad in zip(parameters, gradients):
         if grad is not None:
             update = weight - learning_rate * grad
+            if norm_grad:
+                # TODO: check whether the last iteration is taken into account
+                update.register_hook(normalize_grad)
             if detach:
                 update = update.detach().requires_grad_(weight.requires_grad)
             updates[weight] = update
@@ -64,7 +73,7 @@ class IngraphGradientDescent(nn.Module):
         """
         Return an updated copy of model after one iteration of gradient descent
         :param state: optimizer state (as in self.get_initial_state)
-        :param module: module to be edited (torch_maml.Editable)
+        :param module: module to be updated
         :param loss: torch scalar that is differentiable w.r.t. model parameters
         :parameters: parameters of :module: that will be edited by updates (default = module.parameters())
         :param kwargs: extra parameters passed to get_updated_model
@@ -99,7 +108,7 @@ class IngraphRMSProp(IngraphGradientDescent):
         """
         nn.Module.__init__(self)
         self.params = dict(
-            learning_rate=learning_rate, log_learning_rate=log_learning_rate,
+            learning_rate=learning_rate, max_grad_norm=max_grad_norm, learning_rate=log_learning_rate,
             momentum=momentum, beta=beta, epsilon=epsilon, log_epsilon=log_epsilon
         )
 

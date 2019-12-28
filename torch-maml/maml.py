@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 
-from .ingraph_update import IngraphGradientDescent
+from .optimizers import IngraphGradientDescent
 from .utils import copy_and_replace, do_not_copy, disable_batchnorm_stats
 
 
@@ -27,6 +27,7 @@ class NaiveMAML(nn.Module):
         self.loss_function = loss_function
         self.optimizer = optimizer
         self.get_parameters = get_parameters
+
 
     def forward(self, inputs, opt_kwargs=None, loss_kwargs=None, **kwargs):
         """
@@ -98,8 +99,9 @@ class GradientCheckpointMAML(NaiveMAML):
                 with torch.enable_grad(), disable_batchnorm_stats(updated_model), do_not_copy(*parameters_not_to_copy):
                     loss = self.loss_function(updated_model, inputs[int(step_index)], **loss_kwargs)
                     optimizer_state, updated_model = self.optimizer.step(
-                        optimizer_state, updated_model, loss=loss, detach=is_first_pass,
-                        parameters=self.get_parameters(updated_model), **kwargs)
+                        optimizer_state, updated_model, loss=loss, detach=is_first_pass, # TODO check norm_grad
+                        parameters=self.get_parameters(updated_model), norm_grad=not is_first_pass, **kwargs)
+
                 step_index = step_index + 1
             return (step_index, loss, *self.get_parameters(updated_model), *optimizer_state)
 
