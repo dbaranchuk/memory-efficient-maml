@@ -12,7 +12,7 @@ from .utils import straight_through_grad, copy_and_replace
 
 def get_updated_model(model: nn.Module, loss=None, gradients=None, parameters=None,
                       detach=False, learning_rate=1.0, allow_unused=False,
-                      norm_grad=True, max_grad_norm=1e4, **kwargs):
+                      norm_grad=True, max_global_grad_norm=1e4, **kwargs):
     """
     Creates a copy of model whose parameters are updated with one-step gradient descent w.r.t. loss
     The copy will propagate gradients into the original model
@@ -25,7 +25,7 @@ def get_updated_model(model: nn.Module, loss=None, gradients=None, parameters=No
     :param allow_unused: by default, raise an error if one or more parameters receive None gradients
         Otherwise (allow_unused=True) simply do not update these parameters
     :param norm_grad: TODO
-    :param max_grad_norm: TODO
+    :param max_global_grad_norm: TODO
     """
     assert (loss is None) != (gradients is None)
     parameters = list(model.parameters() if parameters is None else parameters)
@@ -35,17 +35,19 @@ def get_updated_model(model: nn.Module, loss=None, gradients=None, parameters=No
             loss, parameters, create_graph=not detach, only_inputs=True, allow_unused=allow_unused, **kwargs)
 
     assert isinstance(gradients, (list, tuple)) and len(gradients) == len(parameters)
+    global_grad_norm = sum([grad.norm() ** 2 for weight, grad in zip(parameters, gradients)
+                            if grad is not None]).sqrt()
 
-    # Hook to normalize weight gradients after each optimizer step
+    # Handler to normalize weight gradients after each optimizer step
     def normalize_grad(grad):
-        return (grad * max_grad_norm) / max(grad.norm(), max_grad_norm)
+        print(grad.norm())
+        return grad * (max_global_grad_norm / max(global_grad_norm, max_global_grad_norm))
 
     updates = dict()
     for weight, grad in zip(parameters, gradients):
         if grad is not None:
             update = weight - learning_rate * grad
             if norm_grad:
-                # TODO: check whether the last iteration is taken into account
                 update.register_hook(normalize_grad)
             if detach:
                 update = update.detach().requires_grad_(weight.requires_grad)

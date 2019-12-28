@@ -28,7 +28,6 @@ class NaiveMAML(nn.Module):
         self.optimizer = optimizer
         self.get_parameters = get_parameters
 
-
     def forward(self, inputs, opt_kwargs=None, loss_kwargs=None, **kwargs):
         """
         Apply optimizer to the model (out-of-place) and return an updated copy
@@ -38,16 +37,19 @@ class NaiveMAML(nn.Module):
         :returns: updated_model, final_loss, optimizer_state
         :rtype: MAML.Result
         """
+        assert len(inputs) > 0, "Non-empty inputs are required"
         opt_kwargs, loss_kwargs = opt_kwargs or {}, loss_kwargs or {}
         optimizer_state = self.optimizer.get_initial_state(self, **opt_kwargs)
-
         updated_model = self.model
-        for input in inputs:
+
+        # The last input is used for final loss computation
+        for input in inputs[:-1]:
             loss = self.loss_function(updated_model, input, **loss_kwargs)
             optimizer_state, updated_model = self.optimizer.step(
                 optimizer_state, updated_model, loss, parameters=self.get_parameters(updated_model), **kwargs)
 
-        return self.Result(updated_model, loss=loss, optimizer_state=optimizer_state)
+        final_loss = self.loss_function(updated_model, inputs[-1], **loss_kwargs)
+        return self.Result(updated_model, loss=final_loss, optimizer_state=optimizer_state)
 
 
 class GradientCheckpointMAML(NaiveMAML):
@@ -74,6 +76,7 @@ class GradientCheckpointMAML(NaiveMAML):
         :returns: updated_model, final_loss, optimizer_state
         :rtype: GradientCheckpointMAML.Result
         """
+        assert len(inputs) > 0, "Non-empty inputs are required"
         opt_kwargs, loss_kwargs = opt_kwargs or {}, loss_kwargs or {}
         initial_optimizer_state = self.optimizer.get_initial_state(self, **opt_kwargs)
 
@@ -99,7 +102,7 @@ class GradientCheckpointMAML(NaiveMAML):
                 with torch.enable_grad(), disable_batchnorm_stats(updated_model), do_not_copy(*parameters_not_to_copy):
                     loss = self.loss_function(updated_model, inputs[int(step_index)], **loss_kwargs)
                     optimizer_state, updated_model = self.optimizer.step(
-                        optimizer_state, updated_model, loss=loss, detach=is_first_pass, # TODO check norm_grad
+                        optimizer_state, updated_model, loss=loss, detach=is_first_pass,
                         parameters=self.get_parameters(updated_model), norm_grad=not is_first_pass, **kwargs)
 
                 step_index = step_index + 1
@@ -109,14 +112,15 @@ class GradientCheckpointMAML(NaiveMAML):
         initial_trainable_parameters = list(parameters_to_copy)
         trainable_parameters_and_optimizer_state = list(chain(initial_trainable_parameters, initial_optimizer_state))
 
-        for chunk_start in range(0, len(inputs), self.checkpoint_steps):
-            steps = min(self.checkpoint_steps, len(inputs) - chunk_start)
+        # The last input is used for final loss computation
+        for chunk_start in range(0, len(inputs) - 1, self.checkpoint_steps):
+            steps = min(self.checkpoint_steps, len(inputs) - 1 - chunk_start)
             step_index, loss, *trainable_parameters_and_optimizer_state = checkpoint(
                 _maml_internal, step_index, torch.as_tensor(steps), *trainable_parameters_and_optimizer_state)
 
         final_trainable_parameters = trainable_parameters_and_optimizer_state[:len(parameters_to_copy)]
         final_optimizer_state = trainable_parameters_and_optimizer_state[len(parameters_to_copy):]
-
         final_model = copy_and_replace(
             self.model, dict(zip(parameters_to_copy, final_trainable_parameters)), parameters_not_to_copy)
-        return self.Result(final_model, loss=loss, optimizer_state=final_optimizer_state)
+        final_loss = self.loss_function(final_model, inputs[-1], **loss_kwargs)
+        return self.Result(final_model, loss=final_loss, optimizer_state=final_optimizer_state)
