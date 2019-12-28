@@ -12,7 +12,7 @@ from .utils import straight_through_grad, copy_and_replace
 
 def get_updated_model(model: nn.Module, loss=None, gradients=None, parameters=None,
                       detach=False, learning_rate=1.0, allow_unused=False,
-                      norm_grad=True, max_global_grad_norm=1e4, **kwargs):
+                      norm_grad=True, max_grad_norm=1e4, **kwargs):
     """
     Creates a copy of model whose parameters are updated with one-step gradient descent w.r.t. loss
     The copy will propagate gradients into the original model
@@ -25,7 +25,7 @@ def get_updated_model(model: nn.Module, loss=None, gradients=None, parameters=No
     :param allow_unused: by default, raise an error if one or more parameters receive None gradients
         Otherwise (allow_unused=True) simply do not update these parameters
     :param norm_grad: TODO
-    :param max_global_grad_norm: TODO
+    :param max_grad_norm: TODO
     """
     assert (loss is None) != (gradients is None)
     parameters = list(model.parameters() if parameters is None else parameters)
@@ -35,13 +35,10 @@ def get_updated_model(model: nn.Module, loss=None, gradients=None, parameters=No
             loss, parameters, create_graph=not detach, only_inputs=True, allow_unused=allow_unused, **kwargs)
 
     assert isinstance(gradients, (list, tuple)) and len(gradients) == len(parameters)
-    global_grad_norm = sum([grad.norm() ** 2 for weight, grad in zip(parameters, gradients)
-                            if grad is not None]).sqrt()
 
     # Handler to normalize weight gradients after each optimizer step
     def normalize_grad(grad):
-        print(grad.norm())
-        return grad * (max_global_grad_norm / max(global_grad_norm, max_global_grad_norm))
+        return grad * (max_grad_norm / max(grad.norm(), max_grad_norm))
 
     updates = dict()
     for weight, grad in zip(parameters, gradients):
@@ -110,7 +107,7 @@ class IngraphRMSProp(IngraphGradientDescent):
         """
         nn.Module.__init__(self)
         self.params = dict(
-            learning_rate=learning_rate, max_grad_norm=max_grad_norm, learning_rate=log_learning_rate,
+            learning_rate=learning_rate, log_learning_rate=log_learning_rate,
             momentum=momentum, beta=beta, epsilon=epsilon, log_epsilon=log_epsilon
         )
 
