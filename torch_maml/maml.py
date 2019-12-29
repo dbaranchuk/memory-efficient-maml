@@ -125,9 +125,10 @@ class GradientCheckpointMAML(NaiveMAML):
                         parameters=self.get_parameters(updated_model), **kwargs)
 
                 step_index = step_index + 1
-
+            
             new_maml_state = (step_index, list(self.get_parameters(updated_model)), optimizer_state)
-            return (torch.stack(inner_losses), *nested_flatten(new_maml_state))
+            outputs = (torch.stack(inner_losses), *nested_flatten(new_maml_state))
+            return tuple(tensor if tensor.requires_grad else tensor.clone().requires_grad_(True) for tensor in outputs)
 
         loss_history = []
         for chunk_start in range(0, len(inputs), self.checkpoint_steps):

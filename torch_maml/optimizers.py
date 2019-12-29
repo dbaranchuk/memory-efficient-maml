@@ -7,7 +7,7 @@ from itertools import chain
 
 import torch
 from torch import nn as nn
-from .utils import straight_through_grad, copy_and_replace, ClipGradNorm, NONE_TENSOR
+from .utils import straight_through_grad, copy_and_replace, ClipGradNorm, NONE_TENSOR, is_none_tensor
 
 
 def get_updated_model(model: nn.Module, loss=None, gradients=None, parameters=None,
@@ -63,7 +63,13 @@ class IngraphGradientDescent(nn.Module):
         self.learning_rate = learning_rate
 
     def get_initial_state(self, module, *, parameters: list, **kwargs):
-        """ Return initial optimizer state: momenta, rms, etc. State must be a collection of torch tensors! """
+        """ 
+        Return initial optimizer state: momenta, rms, etc. 
+        State:
+        * must be a (nested) collection of torch tensors : lists/tuples/dicts/namedtuples of tensors or lists/... of them
+        * the structure (i.e. lengths) of this collection should NOT change between iterations.
+        * the optimizer state at the input of :step: method forces requires_grad=True to all tensors. 
+        """
         return self.OptimizerState()
 
     def step(self, state: OptimizerState, module: nn.Module, loss, parameters=None, **kwargs):
@@ -123,7 +129,11 @@ class IngraphRMSProp(IngraphGradientDescent):
     def get_initial_state(self, module: nn.Module, *, parameters: list, **overrides):
         """
         Create initial state and make sure all parameters are in a valid range.
-        State must be nested structure of tensors, e.g. a list/dict/tuple/namedtuple of tensors or lists/... of such
+        State:
+        * must be a (nested) collection of torch tensors : lists/tuples/dicts/namedtuples of tensors or lists/... of them
+        * the structure (i.e. lengths) of this collection should NOT change between iterations.
+        * the optimizer state at the input of :step: method forces requires_grad=True to all tensors. 
+        
         :param module: module to be updated
         :param parameters: list of trainable parameters
         :param overrides: send key-value optimizer params with same names as at init to override them
@@ -154,12 +164,12 @@ class IngraphRMSProp(IngraphGradientDescent):
             assert hparams['epsilon'] is None or hparams['log_epsilon'] is None, "provide either epsilon or log epsilon"
             if hparams['epsilon'] is None and hparams['log_epsilon'] is None:
                 hparams['epsilon'] = 1e-6
-            epsilon = hparams['epsilon'] or torch.exp(hparams['log_epsilon'])
+            epsilon = torch.as_tensor(hparams['epsilon']) or torch.exp(hparams['log_epsilon'])
             epsilon = straight_through_grad(torch.clamp_min, min=1e-9)(torch.as_tensor(epsilon))
 
         else:
             epsilon = NONE_TENSOR
-        learning_rate, momentum, beta, epsilon = map(torch.as_tensor, [learning_rate, momentum, beta, epsilon])
+        
         dummy_grad_momenta = dummy_ewma = [NONE_TENSOR for _ in parameters]
         return self.OptimizerState(dummy_grad_momenta, dummy_ewma, learning_rate, momentum, beta, epsilon)
 
@@ -175,22 +185,24 @@ class IngraphRMSProp(IngraphGradientDescent):
             updated_self: updated copy of module
         """
         grad_momenta, ewma_grad_norms_sq, learning_rate, momentum, beta, epsilon = state
+        learning_rate, momentum, beta, epsilon = [
+            tensor.to(loss.device) for tensor in (learning_rate, momentum, beta, epsilon)]
         parameters = list(parameters or module.parameters())
         gradients = torch.autograd.grad(loss, parameters, create_graph=True, only_inputs=True, allow_unused=False)
         updates = list(gradients)  # updates are the scaled/accumulated/tuned gradients
-
-        if momentum is not NONE_TENSOR and float(momentum) != 0:
+        
+        if not is_none_tensor(momentum) and float(momentum) != 0:
             # momentum: accumulate gradients with moving average-like procedure
-            if grad_momenta[0] is NONE_TENSOR:
+            if is_none_tensor(grad_momenta[0]):
                 grad_momenta = list(gradients)
             else:
                 for i in range(len(grad_momenta)):
                     grad_momenta[i] = grad_momenta[i] * momentum + gradients[i]
             updates = grad_momenta
 
-        if beta is not NONE_TENSOR and float(beta) != 0:
+        if not is_none_tensor(beta) and float(beta) != 0:
             # RMSProp: first, update the moving average squared norms
-            if ewma_grad_norms_sq[0] is NONE_TENSOR:
+            if is_none_tensor(ewma_grad_norms_sq[0]):
                 ewma_grad_norms_sq = list(map(lambda g: g ** 2, gradients))
             else:
                 for i in range(len(ewma_grad_norms_sq)):

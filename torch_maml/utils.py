@@ -7,6 +7,11 @@ from torch import nn
 
 NONE_TENSOR = torch.tensor([])
 
+
+def is_none_tensor(x):
+    return isinstance(x, torch.Tensor) and tuple(x.shape) == (0,)
+
+
 DEFAULT_MEMO = dict()
 
 
