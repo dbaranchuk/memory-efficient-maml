@@ -7,7 +7,7 @@ from itertools import chain
 
 import torch
 from torch import nn as nn
-from .utils import straight_through_grad, copy_and_replace, ClipGradNorm
+from .utils import straight_through_grad, copy_and_replace, ClipGradNorm, DUMMY_TENSOR
 
 
 def get_updated_model(model: nn.Module, loss=None, gradients=None, parameters=None,
@@ -154,8 +154,8 @@ class IngraphRMSProp(IngraphGradientDescent):
 
         else:
             epsilon = None
-
-        return self.OptimizerState(None, None, learning_rate, momentum, beta, epsilon)
+        learning_rate, momentum, beta, epsilon = map(torch.as_tensor, learning_rate, momentum, beta, epsilon)
+        return self.OptimizerState(DUMMY_TENSOR, DUMMY_TENSOR, learning_rate, momentum, beta, epsilon)
 
     def step(self, state: OptimizerState, module: nn.Module, loss, parameters=None, **kwargs):
         """
@@ -175,7 +175,7 @@ class IngraphRMSProp(IngraphGradientDescent):
 
         if momentum is not None:
             # momentum: accumulate gradients with moving average-like procedure
-            if grad_momenta is None:
+            if grad_momenta is DUMMY_TENSOR:
                 grad_momenta = list(gradients)
             else:
                 for i in range(len(grad_momenta)):
@@ -184,7 +184,7 @@ class IngraphRMSProp(IngraphGradientDescent):
 
         if beta is not None:
             # RMSProp: first, update the moving average squared norms
-            if ewma_grad_norms_sq is None:
+            if ewma_grad_norms_sq is DUMMY_TENSOR:
                 ewma_grad_norms_sq = list(map(lambda g: g ** 2, gradients))
             else:
                 for i in range(len(ewma_grad_norms_sq)):
