@@ -4,20 +4,20 @@
 
 PyTorch implementation of Model Agnostic Meta Learning[1] with 
  gradient checkpointing[2]. Allows you to perform way (>100x) more
- optimizer steps with the same GPU memory budget. 
+ MAML steps with the same GPU memory budget. 
 
 
 ### Install
 
 For normal installation, run
-```pip install torch-maml```
+```pip install torch_maml```
 
 For development installation, clone a repo and
 ```python setup.py develop```
 
 
 ### How to use:
-See examples is in [```gradient-checkpointing-maml.ipynb```](./gradient-checkpointing-maml.ipynb)
+See examples is in [```example.ipynb```](./example.ipynb)
 
 TODO colab badge
 
