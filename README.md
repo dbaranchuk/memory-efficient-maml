@@ -2,7 +2,7 @@
 
 ### Overview
 
-PyTorch implementation of Model Agnostic Meta Learning[[1]](#references) with 
+PyTorch implementation of Model-Agnostic Meta-Learning[[1]](#references) with 
  gradient checkpointing[[2]](#references). Allows you to perform way (~10-100x) more
  MAML steps with the same GPU memory budget. 
 
