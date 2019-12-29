@@ -179,7 +179,7 @@ class IngraphRMSProp(IngraphGradientDescent):
         gradients = torch.autograd.grad(loss, parameters, create_graph=True, only_inputs=True, allow_unused=False)
         updates = list(gradients)  # updates are the scaled/accumulated/tuned gradients
 
-        if momentum is not NONE_TENSOR:
+        if momentum is not NONE_TENSOR and float(momentum) != 0:
             # momentum: accumulate gradients with moving average-like procedure
             if grad_momenta[0] is NONE_TENSOR:
                 grad_momenta = list(gradients)
@@ -188,7 +188,7 @@ class IngraphRMSProp(IngraphGradientDescent):
                     grad_momenta[i] = grad_momenta[i] * momentum + gradients[i]
             updates = grad_momenta
 
-        if beta is not NONE_TENSOR:
+        if beta is not NONE_TENSOR and float(beta) != 0:
             # RMSProp: first, update the moving average squared norms
             if ewma_grad_norms_sq[0] is NONE_TENSOR:
                 ewma_grad_norms_sq = list(map(lambda g: g ** 2, gradients))
