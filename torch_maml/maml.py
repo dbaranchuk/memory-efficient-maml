@@ -44,7 +44,8 @@ class NaiveMAML(nn.Module):
         assert len(inputs) > 0, "Non-empty inputs are required"
         opt_kwargs, loss_kwargs = opt_kwargs or {}, loss_kwargs or {}
         if optimizer_state is None:
-            optimizer_state = self.optimizer.get_initial_state(self, **opt_kwargs)
+            optimizer_state = self.optimizer.get_initial_state(
+                self.model, parameters=list(self.get_parameters(self.model)), **opt_kwargs)
         updated_model = self.model
 
         loss_history = []
@@ -87,12 +88,13 @@ class GradientCheckpointMAML(NaiveMAML):
         """
         assert len(inputs) > 0, "Non-empty inputs are required"
         opt_kwargs, loss_kwargs = opt_kwargs or {}, loss_kwargs or {}
-        if optimizer_state is None:
-            optimizer_state = self.optimizer.get_initial_state(self, **opt_kwargs)
 
         parameters_to_copy = list(self.get_parameters(self.model))
         parameters_not_to_copy = [param for param in chain(self.model.parameters(), self.model.buffers())
                                   if param not in set(parameters_to_copy)]
+
+        if optimizer_state is None:
+            optimizer_state = self.optimizer.get_initial_state(self.model, parameters=parameters_to_copy, **opt_kwargs)
 
         # initial maml state
         step_index = torch.zeros(1, requires_grad=True)
