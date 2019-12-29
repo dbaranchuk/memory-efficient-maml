@@ -11,18 +11,21 @@ setup(
    license='MIT',
    install_requires=['torch>=1.1.0'],
    classifiers=[
-        # Indicate who your project is intended for
-        'Development Status :: 5 - Production/Stable',
-        'Intended Audience :: Science/Research',
-        'Intended Audience :: Developers',
-        'Topic :: Scientific/Engineering',
-
-        # Pick your license as you wish (should match "license" above)
-        "License :: OSI Approved :: MIT License",
-        'Programming Language :: Python :: 3.5 ',
-        'Programming Language :: Python :: 3.6 ',
-        'Programming Language :: Python :: 3.7 ',
-
+     'Development Status :: 5 - Production/Stable',
+      'Intended Audience :: Developers',
+      'Intended Audience :: Education',
+      'Intended Audience :: Science/Research',
+      'License :: OSI Approved :: MIT License',
+      'Programming Language :: Python :: 3',
+      'Programming Language :: Python :: 3.5',
+      'Programming Language :: Python :: 3.6',
+      'Programming Language :: Python :: 3.7',
+      'Topic :: Scientific/Engineering',
+      'Topic :: Scientific/Engineering :: Mathematics',
+      'Topic :: Scientific/Engineering :: Artificial Intelligence',
+      'Topic :: Software Development',
+      'Topic :: Software Development :: Libraries',
+      'Topic :: Software Development :: Libraries :: Python Modules',
     ],
 
     # What does your project relate to?
