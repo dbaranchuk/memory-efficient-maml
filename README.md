@@ -1,4 +1,4 @@
-# Memory efficient MAML
+# Memory Efficient MAML
 
 ### Overview
 
@@ -17,7 +17,7 @@ For development installation, clone a repo and
 
 
 ### How to use:
-See examples is in [```example.ipynb```](./example.ipynb)
+See examples in [```example.ipynb```](./example.ipynb)
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dbaranchuk/memory-efficient-maml/blob/master/example.ipynb)
 
@@ -26,11 +26,11 @@ See examples is in [```example.ipynb```](./example.ipynb)
 1) Make sure that your model doesn't have implicit parameter updates like 
 torch.nn.BatchNorm2d under track_running_stats=True. With gradient checkpointing
  these updates will be performed twice (once per forward pass). If still want these
- updates, take a look at [```torch_maml.utils.disable_batchnorm_stats```](torch_maml/utils.py#L86-L101)
+ updates, take a look at [```torch_maml.utils.disable_batchnorm_stats```](torch_maml/utils.py#L86-L101).
  Note that we already support this for vanilla BatchNorm{1-3}d.
 
 2) CUDNN optimization slows down the use of gradient checkpoints. 
-One might want to set [```torch.backends.cudnn.benchmarks = False```](https://pytorch.org/docs/stable/notes/randomness.html#cudnn). 
+One might want to set [```torch.backends.cudnn.benchmarks = False``` (https://pytorch.org/docs/stable/notes/randomness.html#cudnn). 
 For example, it speeds up 100 iterations of MAML on ResNet18 by 2.5x
 
 3) When computing gradients through many MAML steps (e.g. 100 or 1000),
