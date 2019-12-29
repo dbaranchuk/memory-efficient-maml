@@ -5,7 +5,7 @@ import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 
 from .optimizers import IngraphGradientDescent
-from .utils import copy_and_replace, do_not_copy, disable_batchnorm_stats
+from .utils import copy_and_replace, do_not_copy, disable_batchnorm_stats, nested_flatten, nested_pack
 
 
 class NaiveMAML(nn.Module):
@@ -94,11 +94,16 @@ class GradientCheckpointMAML(NaiveMAML):
         parameters_not_to_copy = [param for param in chain(self.model.parameters(), self.model.buffers())
                                   if param not in set(parameters_to_copy)]
 
+        # initial maml state
+        step_index = torch.zeros(1, requires_grad=True)
+        initial_maml_state = (step_index, parameters_to_copy, optimizer_state)
+        flat_maml_state = list(nested_flatten(initial_maml_state))
+
         # WARNING: this code treats parameters_to_copy and parameters_not_to_copy as global
         # variables for _maml_internal. Please DO NOT change or delete them in this function
-        def _maml_internal(step_index, steps, *trainable_parameters_and_state):
-            trainable_parameters = trainable_parameters_and_state[:len(parameters_to_copy)]
-            optimizer_state = self.optimizer.OptimizerState(*trainable_parameters_and_state[len(parameters_to_copy):])
+        def _maml_internal(steps, *flat_maml_state):
+            step_index, trainable_parameters, optimizer_state = \
+                nested_pack(flat_maml_state, structure=initial_maml_state)
             updated_model = copy_and_replace(
                 self.model, dict(zip(parameters_to_copy, trainable_parameters)), parameters_not_to_copy)
 
@@ -118,22 +123,18 @@ class GradientCheckpointMAML(NaiveMAML):
                         parameters=self.get_parameters(updated_model), **kwargs)
 
                 step_index = step_index + 1
-            return (step_index, torch.stack(inner_losses), *self.get_parameters(updated_model), *optimizer_state)
 
-        step_index = torch.zeros(1, requires_grad=True)
-        trainable_parameters_and_optimizer_state = list(chain(list(parameters_to_copy), optimizer_state))
+            new_maml_state = (step_index, self.get_parameters(updated_model), optimizer_state)
+            return (torch.stack(inner_losses), *nested_flatten(new_maml_state))
 
         loss_history = []
         for chunk_start in range(0, len(inputs), self.checkpoint_steps):
             steps = min(self.checkpoint_steps, len(inputs) - chunk_start)
-            step_index, inner_losses, *trainable_parameters_and_optimizer_state = checkpoint(
-                _maml_internal, step_index, torch.as_tensor(steps), *trainable_parameters_and_optimizer_state)
+            inner_losses, *flat_maml_state = checkpoint(_maml_internal, torch.as_tensor(steps), *flat_maml_state)
             loss_history.extend(inner_losses.split(1))
 
-        final_trainable_parameters = trainable_parameters_and_optimizer_state[:len(parameters_to_copy)]
-        final_optimizer_state = self.optimizer.OptimizerState(
-            *trainable_parameters_and_optimizer_state[len(parameters_to_copy):]
-        )
+        step_index, final_trainable_parameters, final_optimizer_state = \
+            nested_pack(flat_maml_state, structure=initial_maml_state)
         final_model = copy_and_replace(
             self.model, dict(zip(parameters_to_copy, final_trainable_parameters)), parameters_not_to_copy)
         return self.Result(final_model, loss_history=loss_history, optimizer_state=final_optimizer_state)
