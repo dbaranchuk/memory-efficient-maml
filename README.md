@@ -19,7 +19,7 @@ For development installation, clone a repo and
 ### How to use:
 See examples is in [```example.ipynb```](./example.ipynb)
 
-TODO colab badge
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dbaranchuk/memory-efficient-maml/blob/master/example.ipynb)
 
 
 ### Tips and tricks
