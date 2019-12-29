@@ -26,7 +26,7 @@ TODO colab badge
 1) Make sure that your model doesn't have implicit parameter updates like 
 torch.nn.BatchNorm2d under track_running_stats=True. With gradient checkpointing
  these updates will be performed twice (once per forward pass). If still want these
- updates, take a look at [```torch-maml.utils.disable_batchnorm_stats```](torch_maml/utils.py#L86-L101) TODOurl. 
+ updates, take a look at [```torch_maml.utils.disable_batchnorm_stats```](torch_maml/utils.py#L86-L101) TODOurl. 
  Note that we already support this for vanilla BatchNorm{1-3}d.
 
 2) CUDNN optimization slows down the use of gradient checkpoints. 
