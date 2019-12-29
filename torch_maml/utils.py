@@ -5,7 +5,7 @@ from copy import deepcopy
 import torch
 from torch import nn
 
-DUMMY_TENSOR = torch.tensor([])
+NONE_TENSOR = torch.tensor([])
 
 DEFAULT_MEMO = dict()
 
