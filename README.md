@@ -1,42 +1,46 @@
-# Gradient Checkpointing Meta-Agnostic-Meta-Learning
+# Memory efficient MAML
 
 ### Overview
 
-Straightforward application of the gradient checkpointing 
-technique[1] to Meta-Agnostic-Meta-Learning[2], which mitigates 
-its high memory consumption and allows to perform a large number
-of optimizer steps in MAML. 
+PyTorch implementation of Model Agnostic Meta Learning[1] with 
+ gradient checkpointing[2]. Allows you to perform way (>100x) more
+ optimizer steps with the same GPU memory budget. 
 
 
-### Implementation
+### Install
 
-We provide PyTorch implementation of simple trick, which can be 
-readily incorporated in your projects. Moreover, we wrap it as
-as a pip module: ```pip install torch-maml```
+For normal installation, run
+```pip install torch-maml```
 
-Demo is in ```gradient-checkpointing-maml.ipynb```
+For development installation, clone a repo and
+```python setup.py develop```
 
 
-### Dependencies
+### How to use:
+See examples is in [```gradient-checkpointing-maml.ipynb```](./gradient-checkpointing-maml.ipynb)
 
-* PyTorch >= 1.1.0
-* Numpy 
+TODO colab badge
 
-```pip install -r requirements.txt```
 
-### Important notes
+### Tips and tricks
+1) Make sure that your model doesn't have implicit parameter updates like 
+torch.nn.BatchNorm2d under track_running_stats=True. With gradient checkpointing
+ these updates will be performed twice (once per forward pass). If still want these
+ updates, take a look at ```torch-maml.utils.disable_batchnorm_stats``` TODOurl. 
+ Note that we already support this for vanilla BatchNorm{1-3}d.
 
-1) CUDNN optimization slows down the use of gradient checkpoints. 
+2) CUDNN optimization slows down the use of gradient checkpoints. 
 One might want to use ```torch.backends.cudnn.benchmarks = False```. 
 For example, it speeds up 100 iterations of MAML on ResNet18 by 2.5x
 
-2) While this trick allows to perform many MAML steps (e.g. 100 or 1000),
+3) When computing gradients through many MAML steps (e.g. 100 or 1000),
 you really should care about vanishing and exploding gradients within
-optimizers like in RNN. In our demo we use gradients clipping. TODO cite 
+optimizers (same as in RNN). This implementation supports gradient clipping 
+to avoid the explosive part of the problem.
 
-3) Also when you deal with a large number MAML steps, be aware of 
-accumulating computational errors occured on each steps due to 
-CUDNN and other GPU details???, e.g. at least one can use 
+4) Also when you deal with a large number MAML steps, be aware of 
+accumulating computational error due to float precision and specifically
+CUDNN operations. We recommend you to use 
 ```torch.backend.cudnn.determistic=True```. The problem appears when
 gradients become slightly noisy due to errors and, 
 during backpropagation though MAML steps, the error is likely to 
@@ -44,8 +48,8 @@ dramatically increase.
  
 ### References
 
-[1] Gradient checkpointing technique:
-https://github.com/cybertronai/gradient-checkpointing
-
-[2] Meta-Agnostic-Meta-Learning paper:
+[1] Model Agnostic Meta Learning paper:
 [Model-Agnostic Meta-Learning for Fast Adaptation of Deep Networks](http://proceedings.mlr.press/v70/finn17a/finn17a.pdf)
+
+[2] Gradient checkpointing technique:
+https://github.com/cybertronai/gradient-checkpointing

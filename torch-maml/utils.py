@@ -67,6 +67,22 @@ def straight_through_grad(function, **kwargs):
     return f_straight_through
 
 
+class ClipGradNorm(torch.autograd.Function):
+    """ Do nothing on forward pass but clip gradients by their global norm during backward pass """
+    @staticmethod
+    def forward(ctx, *inputs):
+        """ We manually put max_norm to the end of tensor inputs in order to please Function.apply """
+        ctx._max_norm = inputs[-1].item()
+        return inputs[:-1]
+
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        global_grad_norm = sum([grad_output.norm() ** 2 for grad_output in grad_outputs]).sqrt().item()
+        clip_grad_norm = lambda grad: grad * (ctx._max_norm / max(ctx._max_norm, global_grad_norm))
+        grad_inputs = tuple(map(clip_grad_norm, grad_outputs))
+        return grad_inputs + (None, )
+
+
 @contextlib.contextmanager
 def disable_batchnorm_stats(model: nn.Module):
     """

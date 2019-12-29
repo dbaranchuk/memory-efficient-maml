@@ -7,12 +7,12 @@ from itertools import chain
 
 import torch
 from torch import nn as nn
-from .utils import straight_through_grad, copy_and_replace
+from .utils import straight_through_grad, copy_and_replace, ClipGradNorm
 
 
 def get_updated_model(model: nn.Module, loss=None, gradients=None, parameters=None,
                       detach=False, learning_rate=1.0, allow_unused=False,
-                      norm_grad=True, max_grad_norm=1e4, **kwargs):
+                      max_grad_grad_norm=None, **kwargs):
     """
     Creates a copy of model whose parameters are updated with one-step gradient descent w.r.t. loss
     The copy will propagate gradients into the original model
@@ -24,8 +24,8 @@ def get_updated_model(model: nn.Module, loss=None, gradients=None, parameters=No
     :param learning_rate: scales gradients by this value before updating
     :param allow_unused: by default, raise an error if one or more parameters receive None gradients
         Otherwise (allow_unused=True) simply do not update these parameters
-    :param norm_grad: TODO
-    :param max_grad_norm: TODO
+    :param max_grad_grad_norm: maximal global norm of gradients passing through optimization procedure.
+        Used for gradient clipping through optimizer steps.
     """
     assert (loss is None) != (gradients is None)
     parameters = list(model.parameters() if parameters is None else parameters)
@@ -36,19 +36,17 @@ def get_updated_model(model: nn.Module, loss=None, gradients=None, parameters=No
 
     assert isinstance(gradients, (list, tuple)) and len(gradients) == len(parameters)
 
-    # Handler to normalize weight gradients after each optimizer step
-    def normalize_grad(grad):
-        return grad * (max_grad_norm / max(grad.norm(), max_grad_norm))
-
-    updates = dict()
+    updates = []
     for weight, grad in zip(parameters, gradients):
         if grad is not None:
             update = weight - learning_rate * grad
-            if norm_grad:
-                update.register_hook(normalize_grad)
             if detach:
                 update = update.detach().requires_grad_(weight.requires_grad)
-            updates[weight] = update
+            updates.append(update)
+
+    if max_grad_grad_norm is not None:
+        updates = ClipGradNorm.apply(*(updates + [torch.as_tensor(max_grad_grad_norm)]))
+    updates = dict(zip(parameters, updates))
 
     do_not_copy = [tensor for tensor in chain(model.parameters(), model.buffers())
                    if tensor not in updates]
