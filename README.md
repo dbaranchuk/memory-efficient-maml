@@ -45,11 +45,13 @@ CUDNN operations. We recommend you to use
 gradients become slightly noisy due to errors and, 
 during backpropagation though MAML steps, the error is likely to 
 dramatically increase.  
+
+5) You could also consider Implicit Gradient MAML [[3]](https://github.com/dbaranchuk/gradient-checkpointing-maml#references) for memory efficient meta-learning alternative. While this algorithm requires even less memory, it assumes that your optimization converges to the optimum. Therefore, it is inapplicable if your task does not always converge by the time you start backpropagating. In contrast, our implementation allows you to meta-learn even from partially converged state. 
  
 ### References
 
-[1] Model Agnostic Meta Learning paper:
-[Model-Agnostic Meta-Learning for Fast Adaptation of Deep Networks](http://proceedings.mlr.press/v70/finn17a/finn17a.pdf)
+[1] [Model-Agnostic Meta-Learning for Fast Adaptation of Deep Networks](http://proceedings.mlr.press/v70/finn17a/finn17a.pdf)
 
-[2] Gradient checkpointing technique:
-https://github.com/cybertronai/gradient-checkpointing
+[2] [Gradient checkpointing technique (GitHub)](https://github.com/cybertronai/gradient-checkpointing)
+
+[3] [Meta-Learning with Implicit Gradients](https://arxiv.org/pdf/1909.04630.pdf)
