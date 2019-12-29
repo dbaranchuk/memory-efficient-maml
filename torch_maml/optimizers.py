@@ -154,7 +154,7 @@ class IngraphRMSProp(IngraphGradientDescent):
 
         else:
             epsilon = None
-        learning_rate, momentum, beta, epsilon = map(torch.as_tensor, learning_rate, momentum, beta, epsilon)
+        learning_rate, momentum, beta, epsilon = map(torch.as_tensor, [learning_rate, momentum, beta, epsilon])
         return self.OptimizerState(DUMMY_TENSOR, DUMMY_TENSOR, learning_rate, momentum, beta, epsilon)
 
     def step(self, state: OptimizerState, module: nn.Module, loss, parameters=None, **kwargs):
