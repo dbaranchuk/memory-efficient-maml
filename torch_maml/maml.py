@@ -126,7 +126,7 @@ class GradientCheckpointMAML(NaiveMAML):
 
                 step_index = step_index + 1
 
-            new_maml_state = (step_index, self.get_parameters(updated_model), optimizer_state)
+            new_maml_state = (step_index, list(self.get_parameters(updated_model)), optimizer_state)
             return (torch.stack(inner_losses), *nested_flatten(new_maml_state))
 
         loss_history = []
